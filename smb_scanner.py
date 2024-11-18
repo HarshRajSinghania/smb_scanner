@@ -1,68 +1,151 @@
 import argparse
-from smbprotocol import SMBConnection, parse_url, Session, TreeConnect, Dialects
-from smbprotocol.exceptions import SMBAuthenticationError
-from smbprotocol.file import FileAttributes, CreateDisposition, CreateOptions, FileDirectoryInformation
-from smbprotocol.transport import TcpTransport
+import os
+from smbprotocol.connection import Connection
+from smbprotocol.session import Session
+from smbprotocol.tree import TreeConnect
+from smbprotocol.open import Open
+from smbprotocol.file_information import FileAttributes
+import logging
+from tqdm import tqdm
 
-# Function to authenticate and establish connection
-def authenticate(server, username, password, domain=""):
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def authenticate(server, username, password):
+    """Authenticate with the SMB server."""
     try:
-        smb_conn = SMBConnection()
-        smb_conn.set_credentials(username, password, domain)
-        smb_conn.connect(server, 445)
-        return smb_conn
-    except SMBAuthenticationError:
-        print(f"Authentication failed for {server} with username {username}.")
-        return None
+        connection = Connection(uuid=None, server=server, port=445)
+        connection.connect()
 
-# Function to scan and list all files and directories recursively
-def scan_directory(smb_conn, server, share_name, path="\\"):
-    tree = TreeConnect(smb_conn, server, share_name)
-    tree.connect()
-
-    # Start from the root directory
-    files = []
-    _scan_dir_recursive(tree, path, files)
-
-    # Display all the files found
-    print(f"Files and directories found on {server}\\{share_name}{path}:")
-    for file in files:
-        print(file)
-
-def _scan_dir_recursive(tree, path, files):
-    try:
-        # List files and directories in the current path
-        directory = tree.query_directory(path)
-        for file in directory:
-            if file.is_directory:
-                # Recursively scan subdirectories
-                _scan_dir_recursive(tree, path + file.file_name + "\\", files)
-            else:
-                files.append(path + file.file_name)
+        session = Session(connection, username=username, password=password)
+        session.connect()
+        return connection, session
     except Exception as e:
-        print(f"Error scanning {path}: {e}")
+        logging.error(f"Authentication failed: {e}")
+        return None, None
 
-# Main function to parse arguments and run the process
+
+def list_directory(tree, path="\\"):
+    """List files and directories at the specified path."""
+    try:
+        dir_handle = Open(tree, path, desired_access=FileAttributes.FILE_LIST_DIRECTORY)
+        entries = dir_handle.query_directory()
+        dir_handle.close()
+        return entries
+    except Exception as e:
+        logging.error(f"Error listing directory {path}: {e}")
+        return []
+
+
+def scan_directory(tree, path="\\", results=None):
+    """Recursively scan the directory."""
+    if results is None:
+        results = []
+
+    entries = list_directory(tree, path)
+    for entry in entries:
+        name = entry['file_name'].get_value()
+        is_directory = entry['file_attributes'].get_value() & FileAttributes.FILE_ATTRIBUTE_DIRECTORY
+
+        full_path = os.path.join(path, name)
+        results.append(full_path)
+
+        if is_directory and name not in [".", ".."]:
+            scan_directory(tree, full_path, results)
+
+    return results
+
+
+def download_file(tree, server_path, local_path):
+    """Download a file from the SMB server."""
+    try:
+        file_handle = Open(tree, server_path, desired_access=FileAttributes.FILE_READ_DATA)
+        file_data = file_handle.read(0, file_handle.end_of_file)
+        file_handle.close()
+
+        with open(local_path, "wb") as f:
+            f.write(file_data)
+
+        logging.info(f"File downloaded: {server_path} -> {local_path}")
+    except Exception as e:
+        logging.error(f"Error downloading file {server_path}: {e}")
+
+
+def upload_file(tree, local_path, server_path):
+    """Upload a file to the SMB server."""
+    try:
+        if not os.path.exists(local_path):
+            logging.error(f"Local file not found: {local_path}")
+            return
+
+        with open(local_path, "rb") as f:
+            file_data = f.read()
+
+        file_handle = Open(tree, server_path, desired_access=FileAttributes.FILE_WRITE_DATA)
+        file_handle.write(0, file_data)
+        file_handle.close()
+
+        logging.info(f"File uploaded: {local_path} -> {server_path}")
+    except Exception as e:
+        logging.error(f"Error uploading file {local_path}: {e}")
+
+
+def delete_file_or_directory(tree, server_path):
+    """Delete a file or directory from the SMB server."""
+    try:
+        file_handle = Open(tree, server_path, desired_access=FileAttributes.FILE_DELETE)
+        file_handle.delete()
+        file_handle.close()
+
+        logging.info(f"Deleted: {server_path}")
+    except Exception as e:
+        logging.error(f"Error deleting {server_path}: {e}")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="SMB Server File Scanner")
-    parser.add_argument('server', type=str, help="IP address or hostname of the SMB server")
-    parser.add_argument('share', type=str, help="The shared folder name to scan")
-    parser.add_argument('--username', type=str, help="Username for authentication")
-    parser.add_argument('--password', type=str, help="Password for authentication")
-    parser.add_argument('--domain', type=str, help="Domain for authentication (optional)", default="")
-    
+    parser = argparse.ArgumentParser(description="Enhanced SMB Server File Scanner")
+    parser.add_argument("server", type=str, help="SMB server address (IP or hostname)")
+    parser.add_argument("share", type=str, help="SMB share name")
+    parser.add_argument("--username", type=str, default="guest", help="Username for authentication")
+    parser.add_argument("--password", type=str, default="", help="Password for authentication")
+    parser.add_argument("--scan", action="store_true", help="Scan and list all files and directories")
+    parser.add_argument("--download", type=str, help="Download a file from the server")
+    parser.add_argument("--output", type=str, help="Local output path for downloaded file")
+    parser.add_argument("--upload", type=str, help="Local file path to upload to the server")
+    parser.add_argument("--destination", type=str, help="Server path to upload the file")
+    parser.add_argument("--delete", type=str, help="Delete a file or directory on the server")
+    parser.add_argument("--log", type=str, help="Log file path")
+
     args = parser.parse_args()
 
-    # If no login details are passed, try guest login
-    username = args.username if args.username else "guest"
-    password = args.password if args.password else ""
+    # Configure logging to file if specified
+    if args.log:
+        logging.basicConfig(filename=args.log, level=logging.INFO)
 
-    # Authenticate with SMB server
-    smb_conn = authenticate(args.server, username, password, args.domain)
-    if smb_conn:
-        scan_directory(smb_conn, args.server, args.share)
-    else:
-        print(f"Failed to connect to the server {args.server}.")
+    # Authenticate with the server
+    connection, session = authenticate(args.server, args.username, args.password)
+    if not connection or not session:
+        return
+
+    tree = TreeConnect(session, f"\\\\{args.server}\\{args.share}")
+    tree.connect()
+
+    if args.scan:
+        logging.info("Scanning directory structure...")
+        files = scan_directory(tree)
+        for file in files:
+            print(file)
+
+    if args.download and args.output:
+        download_file(tree, args.download, args.output)
+
+    if args.upload and args.destination:
+        upload_file(tree, args.upload, args.destination)
+
+    if args.delete:
+        delete_file_or_directory(tree, args.delete)
+
 
 if __name__ == "__main__":
     main()

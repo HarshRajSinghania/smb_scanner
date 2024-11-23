@@ -4,7 +4,7 @@ from smbprotocol.connection import Connection
 from smbprotocol.session import Session
 from smbprotocol.tree import TreeConnect
 from smbprotocol.open import Open
-from smbprotocol.file_information import FileAttributes
+from smbprotocol.file_info import FileAttributes
 import logging
 from tqdm import tqdm
 

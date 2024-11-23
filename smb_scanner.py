@@ -6,8 +6,7 @@ from smbprotocol.tree import TreeConnect
 from smbprotocol.open import Open
 from smbprotocol.file_info import FileAttributes
 import logging
-from tqdm import tqdm
-
+import uuid
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -15,7 +14,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 def authenticate(server, username, password):
     """Authenticate with the SMB server."""
     try:
-        connection = Connection(uuid=None, server=server, port=445)
+        connection = Connection(server_name=server, port=445, guid=uuid.uuid4())
         connection.connect()
 
         session = Session(connection, username=username, password=password)

@@ -91,11 +91,10 @@ Includes information about successful operations, errors, and authentication sta
 
     Python 3.7+
     smbprotocol library
-    tqdm library
 
 Install the dependencies with:
 
-pip install smbprotocol tqdm
+pip install smbprotocol
 
 ## Limitations
 

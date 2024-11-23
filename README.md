@@ -21,9 +21,6 @@ This is a Python script that allows you to authenticate with an SMB server, scan
 4. **Logging**:
    - Save detailed logs of all actions and errors to a file.
 
-5. **Progress Indicators**:
-   - Progress bars for large operations (using `tqdm`).
-
 ---
 
 ## Installation
@@ -31,11 +28,10 @@ This is a Python script that allows you to authenticate with an SMB server, scan
 ### Prerequisites
 - Python 3.7 or higher
 - `smbprotocol` package for SMB interactions
-- `tqdm` for progress indicators
 
 ### Install Required Libraries
 
-pip install smbprotocol tqdm
+pip install smbprotocol
 
 ## Usage
 

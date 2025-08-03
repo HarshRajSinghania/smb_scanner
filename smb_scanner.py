@@ -4,7 +4,7 @@ from smbprotocol.connection import Connection
 from smbprotocol.session import Session
 from smbprotocol.tree import TreeConnect
 from smbprotocol.open import Open
-from smbprotocol.file_info import FileAttributes
+from smbprotocol.file_info import FileAttributes, FileAccessMask, FileDirectoryAccessMask
 import logging
 import uuid
 
@@ -36,7 +36,7 @@ def authenticate(server, username, password):
 def list_directory(tree, path="\\"):
     """List files and directories at the specified path."""
     try:
-        dir_handle = Open(tree, path, desired_access=FileAttributes.FILE_LIST_DIRECTORY)
+        dir_handle = Open(tree, path, desired_access=FileDirectoryAccessMask.FILE_LIST_DIRECTORY)
         entries = dir_handle.query_directory()
         dir_handle.close()
         return entries
@@ -69,7 +69,7 @@ def scan_directory(tree, path="\\", results=None):
 def download_file(tree, server_path, local_path):
     """Download a file from the SMB server."""
     try:
-        file_handle = Open(tree, server_path, desired_access=FileAttributes.FILE_READ_DATA)
+        file_handle = Open(tree, server_path, desired_access=FileAccessMask.FILE_READ_DATA)
         file_data = file_handle.read(0, file_handle.end_of_file)
         file_handle.close()
 
@@ -96,11 +96,11 @@ def upload_file(tree, local_path, server_path):
 
         # Atomic write using temporary file
         temp_path = f"{server_path}.tmp"
-        temp_handle = Open(tree, temp_path, desired_access=FileAttributes.FILE_WRITE_DATA)
+        temp_handle = Open(tree, temp_path, desired_access=FileAccessMask.FILE_WRITE_DATA)
         temp_handle.write(0, file_data)
         temp_handle.close()
         
-        file_handle = Open(tree, server_path, desired_access=FileAttributes.FILE_WRITE_DATA)
+        file_handle = Open(tree, server_path, desired_access=FileAccessMask.FILE_WRITE_DATA)
         file_handle.rename(temp_path, server_path)
         file_handle.close()
 
@@ -112,7 +112,7 @@ def upload_file(tree, local_path, server_path):
 def delete_file_or_directory(tree, server_path):
     """Delete a file or directory from the SMB server."""
     try:
-        file_handle = Open(tree, server_path, desired_access=FileAttributes.FILE_DELETE)
+        file_handle = Open(tree, server_path, desired_access=FileAccessMask.FILE_DELETE)
         file_handle.delete()
         file_handle.close()
 

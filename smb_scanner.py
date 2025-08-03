@@ -14,14 +14,22 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 def authenticate(server, username, password):
     """Authenticate with the SMB server."""
     try:
+        if not server or not isinstance(server, str):
+            raise ValueError("Invalid server address")
+
         connection = Connection(server_name=server, port=445, guid=uuid.uuid4())
-        connection.connect()
+        connection.connect(timeout=10)
 
         session = Session(connection, username=username, password=password)
         session.connect()
+        logging.info(f"Authenticated successfully to {server}")
         return connection, session
     except Exception as e:
-        logging.error(f"Authentication failed: {e}")
+        logging.error(f"Authentication failed: {type(e).__name__} - {str(e)}")
+        if "NT_STATUS_LOGON_FAILURE" in str(e):
+            logging.error("Invalid credentials provided")
+        elif "NT_STATUS_HOST_UNREACHABLE" in str(e):
+            logging.error("Host unreachable - check network connection")
         return None, None
 
 
@@ -127,8 +135,18 @@ def main():
     if not connection or not session:
         return
 
-    tree = TreeConnect(session, f"\\\\{args.server}\\{args.share}")
-    tree.connect()
+    # Validate share name format
+    if not args.share or "/" in args.share or " " in args.share:
+        logging.error("Invalid share name. Must not contain spaces or slashes")
+        return
+
+    try:
+        tree = TreeConnect(session, f"\\\\{args.server}\\{args.share}")
+        tree.connect()
+        logging.info(f"Connected to share: {args.share}")
+    except Exception as e:
+        logging.error(f"Failed to connect to share: {e}")
+        return
 
     if args.scan:
         logging.info("Scanning directory structure...")

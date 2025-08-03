@@ -60,7 +60,7 @@ python smb_scanner.py <server> <share> [options]
 
 ## Examples
 
-### 1. Scan a Directory
+### 2. Download a File
 
 python smb_scanner.py 192.168.1.10 share_name --scan
 
@@ -95,6 +95,18 @@ Includes information about successful operations, errors, and authentication sta
 Install the dependencies with:
 
 pip install smbprotocol
+
+## GitHub Repository
+
+```bash
+# Clone the repository
+git clone https://github.com/HarshRajSinghania/smb_scanner.git
+cd smb_scanner
+
+# Set up development environment
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
 ## Limitations
 

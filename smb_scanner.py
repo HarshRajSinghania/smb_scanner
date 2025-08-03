@@ -61,6 +61,8 @@ def scan_directory(tree, path="\\", results=None):
         if is_directory and name not in [".", ".."]:
             scan_directory(tree, full_path, results)
 
+    if not results:
+        logging.warning("No files found during scan")
     return results
 
 
@@ -71,8 +73,11 @@ def download_file(tree, server_path, local_path):
         file_data = file_handle.read(0, file_handle.end_of_file)
         file_handle.close()
 
-        with open(local_path, "wb") as f:
+        # Atomic write using temporary file
+        temp_path = f"{local_path}.tmp"
+        with open(temp_path, "wb") as f:
             f.write(file_data)
+        os.rename(temp_path, local_path)
 
         logging.info(f"File downloaded: {server_path} -> {local_path}")
     except Exception as e:
@@ -89,8 +94,14 @@ def upload_file(tree, local_path, server_path):
         with open(local_path, "rb") as f:
             file_data = f.read()
 
+        # Atomic write using temporary file
+        temp_path = f"{server_path}.tmp"
+        temp_handle = Open(tree, temp_path, desired_access=FileAttributes.FILE_WRITE_DATA)
+        temp_handle.write(0, file_data)
+        temp_handle.close()
+        
         file_handle = Open(tree, server_path, desired_access=FileAttributes.FILE_WRITE_DATA)
-        file_handle.write(0, file_data)
+        file_handle.rename(temp_path, server_path)
         file_handle.close()
 
         logging.info(f"File uploaded: {local_path} -> {server_path}")
